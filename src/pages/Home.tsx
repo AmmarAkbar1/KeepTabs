@@ -1,6 +1,7 @@
 import {useState, useEffect} from "react";
 import {useNavigate} from "react-router";
 import {supabase} from "../lib/supabase";
+import {notify} from "../lib/notifications";
 import "./App.css";
 
 
@@ -103,10 +104,63 @@ export default function Home() {
     }
   };
 
-
   function show(){
     return DropdownVisible ? "Dropdown-Content Show" : "Dropdown-Content";
   }
+
+  useEffect(() => {
+  let channel: any;
+  async function setupRealtimeListener() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    const currentUserId = session.user.id;
+    // Listen to changes on the transactions table
+    channel = supabase
+      .channel("realtime-transactions")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "transactions",
+        },
+        (payload) => {
+          const newTx = payload.new;
+          // Notify if someone else created a tab where YOU are the recipient
+          if (newTx.recipient_id === currentUserId && newTx.creator_id !== currentUserId) {
+            notify(
+              "New Tab Request",
+              `A partner requested \$${parseFloat(newTx.amount).toFixed(2)}: "${newTx.explanation || "No reason"}"`
+            );
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "transactions",
+        },
+        (payload) => {
+          const updatedTx = payload.new;
+          // Notify if your tab was approved
+          if (updatedTx.payee_id === currentUserId && updatedTx.approval === "true") {
+            notify(
+              "Tab Approved! 🎉",
+              `Your tab for \$${parseFloat(updatedTx.amount).toFixed(2)} was approved.`
+            );
+          }
+        }
+      )
+      .subscribe();
+  }
+  setupRealtimeListener();
+  // Cleanup on unmount
+  return () => {
+    if (channel) supabase.removeChannel(channel);
+  };
+}, []);
 
     return(
         <main className="container">
