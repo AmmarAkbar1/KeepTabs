@@ -1,54 +1,76 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
-// import "./App.css";
-import {Route} from "react-router";
+import { useEffect } from "react";
+import { Outlet } from "react-router";
+import { supabase } from "./lib/supabase";
+import { notify } from "./lib/notifications";
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+export default function App() {
+  useEffect(() => {
+    let channel: any;
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
+    async function setupRealtimeListener() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
 
-  return (
+      const currentUserId = session.user.id;
 
+      // Global listener for transactions
+      channel = supabase
+        .channel("global-realtime-transactions")
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "transactions",
+          },
+          (payload) => {
+            const newTx = payload.new;
+            // Notify if someone requested a tab from you
+            if (newTx.recipient_id === currentUserId && newTx.creator_id !== currentUserId) {
+              notify(
+                "New Tab Request",
+                `A partner requested \$${parseFloat(newTx.amount).toFixed(2)}: "${newTx.explanation || "No reason"}"`
+              );
+            }
+          }
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "transactions",
+          },
+          (payload) => {
+            const updatedTx = payload.new;
+            // Notify if your tab was approved
+            if (updatedTx.payee_id === currentUserId && updatedTx.approval === "true") {
+              notify(
+                "Tab Approved! 🎉",
+                `Your tab for \$${parseFloat(updatedTx.amount).toFixed(2)} was approved.`
+              );
+            }
+          }
+        )
+        .subscribe();
+    }
 
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
+    setupRealtimeListener();
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
+    // Re-connect when logging in, disconnect when logging out
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        setupRealtimeListener();
+      } else if (channel) {
+        supabase.removeChannel(channel);
+      }
+    });
 
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
-  );
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  return <Outlet />;
 }
-
-export default App;

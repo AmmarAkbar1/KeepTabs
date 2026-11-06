@@ -9,8 +9,8 @@ export default function Home() {
   const [username, setUsername] = useState<string>("Loading...");
   const [DropdownVisible, setDropdownVisible] = useState(false);
   const [partners, setPartners] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  // const [loading, setLoading] = useState(false);
+  // const [error, setError] = useState("");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -48,9 +48,9 @@ export default function Home() {
         return;
       }
 
-      setLoading(true);
-      setError("");
-      try {
+      // setLoading(true);
+      // setError("");
+      // try {
         const { data, error } = await supabase
           .from("profiles")
           .select("id, username, email")
@@ -59,15 +59,18 @@ export default function Home() {
 
         if (error) throw error;
         setPartners(data || []);
-      } catch (err: unknown) {
-        if (err instanceof Error) {
-          setError(err.message);
-        } else {
-          setError(String(err));
-        }
-      } finally {
-        setLoading(false);
-      }
+      // }
+      //  catch (err: unknown) {
+      //   if (err instanceof Error) {
+      //     setError(err.message);
+      //   } else {
+      //     setError(String(err));
+      //   }
+      // } 
+      // finally {
+        // setLoading(false);
+        
+      // }
     }
 
     loadProfiles();
@@ -182,8 +185,6 @@ export default function Home() {
 
             </div>
           </div>
-          {/* <h1 className="welcome">Welcome to KeepTabs</h1> */}
-
           
             <h1>Other Users</h1>
             <div className="partnerlist">

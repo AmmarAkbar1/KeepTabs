@@ -50,7 +50,7 @@ export default function Partner() {
       return;
     }
     if(userA === userId){
-      setDebt(data.balance);
+      setDebt((parseFloat(data.balance)).toFixed(2).toString());
     }
     else{
       setDebt((parseFloat(data.balance) * -1).toFixed(2).toString());
@@ -117,14 +117,23 @@ export default function Partner() {
 
       const [userA, userB] = userId < partnerId ? [userId, partnerId] : [partnerId, userId];
 
+      const { data: debtRecord } = await supabase
+        .from("debts")
+        .select("balance")
+        .eq("user_a", userA)
+        .eq("user_b", userB)
+        .maybeSingle();
+
+      const currentBalance = debtRecord ? parseFloat(debtRecord.balance) : 0;
+
       // adds the correct amount to the debt based on whether the user is the payee or recipient
-      if ((userA === userId && transaction.payee_id === userId) || (userB === userId && transaction.recipient_id === userId)) {
-        truedebt = (parseFloat(debt) + parseFloat(transaction.amount)).toFixed(2).toString();
-        setDebt(truedebt);
+      if (userA === transaction.payee_id) {
+        truedebt = (currentBalance + parseFloat(transaction.amount)).toFixed(2).toString();
+        // setDebt(truedebt);
       }
-      if ((userB === userId && transaction.payee_id === userId) || (userA === userId && transaction.recipient_id === userId)){
-        truedebt = ((parseFloat(debt) - parseFloat(transaction.amount)) * -1).toFixed(2).toString();
-        setDebt((parseFloat(truedebt) * -1).toFixed(2).toString());
+      if (userA === transaction.recipient_id){
+        truedebt = (currentBalance - parseFloat(transaction.amount)).toFixed(2).toString();
+        // setDebt((parseFloat(truedebt) * -1).toFixed(2).toString());
       }
 
       await supabase.from("debts").upsert({
@@ -137,6 +146,7 @@ export default function Partner() {
         onConflict: "user_a,user_b"
       });
 
+      fetchBalance(userId, partnerId);
       fetchTransactions(userId, partnerId);
     }
 
