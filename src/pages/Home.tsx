@@ -1,7 +1,8 @@
 import {useState, useEffect} from "react";
-import {useNavigate} from "react-router";
+import {Link, useNavigate} from "react-router";
 import {supabase} from "../lib/supabase";
 import {notify} from "../lib/notifications";
+import appLogo from "../assets/app-icon.png";
 import "./App.css";
 
 
@@ -169,7 +170,9 @@ export default function Home() {
         <main className="container">
           <div className="Banner">
             <div className="BannerRow">
-              <h1 className="title">KeepTabs</h1>
+              <Link to="/" className="banner-logo-link">
+                <img src={appLogo} alt="KeepTabs" className="banner-logo" />
+              </Link>
 
               <div className="row">
                 <h1 className="Username">{username}</h1>
