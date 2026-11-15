@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import {Link, useLocation, useNavigate} from "react-router";
 import {supabase} from "../lib/supabase";
+import appLogo from "../assets/app-icon.png";
 import "./App.css";
 
 export default function Partner() {
@@ -235,7 +236,9 @@ export default function Partner() {
     <main className="container">
       <div className="Banner">
           <div className="BannerRow">
-            <Link to="/" className="backBtn">Home</Link>
+            <Link to="/" className="banner-logo-link">
+              <img src={appLogo} alt="KeepTabs" className="banner-logo" />
+            </Link>
 
             <div className="row">
               <h1 className="Username">{partner}</h1>
