@@ -1,43 +1,53 @@
 import { useState, useEffect } from "react";
-import {Link, useLocation, useNavigate} from "react-router";
-import {supabase} from "../lib/supabase";
-import appLogo from "../assets/app-icon.png";
-import "./App.css";
+import { useLocation, useNavigate } from "react-router";
+import { supabase } from "@/lib/supabase";
+import { AppHeader } from "@/components/layout/AppHeader";
+import { BalanceHero } from "@/components/BalanceHero";
+import { CreateTabCard } from "@/components/CreateTabCard";
+import { TransactionItem } from "@/components/TransactionItem";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { History, ChevronDown, ChevronUp } from "lucide-react";
 
 export default function Partner() {
   const location = useLocation();
-  
-  const [amount, setAmount] = useState("");
-  const [debt, setDebt] = useState("");
-  const [transactions, setTransactions] = useState<any[]>([]);
-  const [explanation, setExplanation] = useState("");
-  const [userId, setUserId] = useState("");
-  const [showAll, setShowAll] = useState(false);
-
-  const dollarRegex = /^\d*\.?\d{0,2}$/;
-  
-  const partner = location.state.partner;
-  const partnerId = location.state.partnerId;
   const navigate = useNavigate();
 
+  const [debt, setDebt] = useState<number>(0);
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [userId, setUserId] = useState("");
+  const [username, setUsername] = useState("User");
+  const [showAll, setShowAll] = useState(false);
+
+  const partner = location.state?.partner;
+  const partnerId = location.state?.partnerId;
+
   useEffect(() => {
-    async function init(){
-      const {data:{session}} = await supabase.auth.getSession();
-  
-      if (!session){
+    if (!partnerId) {
+      navigate("/");
+      return;
+    }
+
+    async function init() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
         navigate("/login");
         return;
       }
-       
+
       setUserId(session.user.id);
+      setUsername(session.user.user_metadata?.username || "User");
       fetchBalance(session.user.id, partnerId);
       fetchTransactions(session.user.id, partnerId);
     }
-  init();
-}, [navigate]);
+    init();
+  }, [partnerId, navigate]);
 
-  const fetchBalance = async (userId: string, partnerId: string) => {
-    const [userA, userB] = userId < partnerId ? [userId, partnerId] : [partnerId, userId]; 
+  const fetchBalance = async (uid: string, pid: string) => {
+    const [userA, userB] = uid < pid ? [uid, pid] : [pid, uid];
 
     const { data } = await supabase
       .from("debts")
@@ -47,74 +57,62 @@ export default function Partner() {
       .maybeSingle();
 
     if (!data) {
-      setDebt("0.00");
+      setDebt(0);
       return;
     }
-    if(userA === userId){
-      setDebt((parseFloat(data.balance)).toFixed(2).toString());
-    }
-    else{
-      setDebt((parseFloat(data.balance) * -1).toFixed(2).toString());
-    }
-  }
 
-  const fetchTransactions = async (userId: string, partnerId: string) => {
-    const { data } = await supabase
-      .from("transactions")
-      .select("id, payee_id, recipient_id, creator_id, amount, explanation, created_at, approval")
-      .or(`and(payee_id.eq.${userId},recipient_id.eq.${partnerId}),and(payee_id.eq.${partnerId},recipient_id.eq.${userId})`)
-      .order("created_at", {ascending: false});
-
-      if (data) setTransactions(data);
-  }
-
-  const handleTransaction = async (pay: boolean) => {
-    if (amount && parseFloat(amount) > 0){  
-   
-      if (pay){
-        await supabase.from("transactions").insert([{
-          payee_id: userId,
-          recipient_id: partnerId,
-          creator_id: userId,
-          amount: amount,
-          explanation: explanation.trim() || "No explanation provided",
-          approval: "false"
-      }])
-      }
-
-      else{
-        await supabase.from("transactions").insert([{
-          payee_id: partnerId,
-          recipient_id: userId,
-          creator_id: userId,
-          amount: amount,
-          explanation: explanation.trim() || "No explanation provided",
-          approval: "false"
-      }])
-      }
-
-      setAmount("");
-      setExplanation("");
-      fetchTransactions(userId, partnerId);
-    }
-  }
-
-  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    if (dollarRegex.test(value)) {
-      setAmount(value);
+    const val = parseFloat(data.balance) || 0;
+    if (userA === uid) {
+      setDebt(val);
+    } else {
+      setDebt(-val);
     }
   };
 
-  // checks if the transaction is approved, and if so, updates the debt accordingly
-  const handleApproval = async (transaction: any, approval: boolean) => {
-    let truedebt = "";
-
-    if (approval){
-      await supabase
+  const fetchTransactions = async (uid: string, pid: string) => {
+    const { data } = await supabase
       .from("transactions")
-      .update({approval: "true"})
-      .eq("id", transaction.id);
+      .select("id, payee_id, recipient_id, creator_id, amount, explanation, created_at, approval")
+      .or(`and(payee_id.eq.${uid},recipient_id.eq.${pid}),and(payee_id.eq.${pid},recipient_id.eq.${uid})`)
+      .order("created_at", { ascending: false });
+
+    if (data) setTransactions(data);
+  };
+
+  const handleCreateTransaction = async (
+    amountVal: string,
+    reason: string,
+    isPay: boolean
+  ) => {
+    const payload = isPay
+      ? {
+          payee_id: userId,
+          recipient_id: partnerId,
+          creator_id: userId,
+          amount: amountVal,
+          explanation: reason || "No explanation provided",
+          approval: "false",
+        }
+      : {
+          payee_id: partnerId,
+          recipient_id: userId,
+          creator_id: userId,
+          amount: amountVal,
+          explanation: reason || "No explanation provided",
+          approval: "false",
+        };
+
+    const { error } = await supabase.from("transactions").insert([payload]);
+    if (error) throw error;
+    fetchTransactions(userId, partnerId);
+  };
+
+  const handleApproval = async (transaction: any, approval: boolean) => {
+    if (approval) {
+      await supabase
+        .from("transactions")
+        .update({ approval: "true" })
+        .eq("id", transaction.id);
 
       const [userA, userB] = userId < partnerId ? [userId, partnerId] : [partnerId, userId];
 
@@ -126,195 +124,131 @@ export default function Partner() {
         .maybeSingle();
 
       const currentBalance = debtRecord ? parseFloat(debtRecord.balance) : 0;
+      let truedebt = "";
 
-      // adds the correct amount to the debt based on whether the user is the payee or recipient
       if (userA === transaction.payee_id) {
-        truedebt = (currentBalance + parseFloat(transaction.amount)).toFixed(2).toString();
-        // setDebt(truedebt);
-      }
-      if (userA === transaction.recipient_id){
-        truedebt = (currentBalance - parseFloat(transaction.amount)).toFixed(2).toString();
-        // setDebt((parseFloat(truedebt) * -1).toFixed(2).toString());
+        truedebt = (currentBalance + parseFloat(transaction.amount)).toFixed(2);
+      } else if (userA === transaction.recipient_id) {
+        truedebt = (currentBalance - parseFloat(transaction.amount)).toFixed(2);
       }
 
-      await supabase.from("debts").upsert({
-        user_a: userA,
-        user_b: userB,
-        balance: truedebt,
-        updated_at: new Date().toISOString()
-      },
-      {
-        onConflict: "user_a,user_b"
-      });
+      await supabase.from("debts").upsert(
+        {
+          user_a: userA,
+          user_b: userB,
+          balance: truedebt,
+          updated_at: new Date().toISOString(),
+        },
+        {
+          onConflict: "user_a,user_b",
+        }
+      );
 
+      toast.success("Tab approved!");
       fetchBalance(userId, partnerId);
       fetchTransactions(userId, partnerId);
-    }
-
-    else{
+    } else {
       await supabase
-      .from("transactions")
-      .update({approval: "declined"})
-      .eq("id", transaction.id);
+        .from("transactions")
+        .update({ approval: "declined" })
+        .eq("id", transaction.id);
 
+      toast.info("Tab declined.");
       fetchTransactions(userId, partnerId);
-  } 
-  }
-
-  const showApproval = (transaction: any) => {
-    if (transaction.approval === "false"){
-      if(transaction.creator_id === userId){
-        return "pending";
-      }
-      else{
-        return "show";
-      }
     }
-    else if (transaction.approval === "declined"){
-      return "declined";
-    }
-    else{
-      return "approved";
-    }
-  }
-
-  const correctHistory = (transaction: any) => {
-    if(transaction.payee_id === userId){
-      return (parseFloat(transaction.amount)).toFixed(2).toString();
-    }
-    else if (transaction.recipient_id === userId){
-      return (parseFloat(transaction.amount) * -1).toFixed(2).toString();
-    }
-  }
-
-  const handleShow = () => {
-      setShowAll(!showAll);
-  }
-
-  const color = (transaction: any) => {
-    if (transaction.approval === "declined"){
-      return " declined";
-    }
-
-    if (transaction.payee_id === userId){
-      return " green";
-    }
-    else{
-      return " red";
-    }
-  }
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleString("en-US", {dateStyle: "medium", timeStyle: "short"});
   };
 
   const sortedTransactions = [...transactions].sort((a, b) => {
-    // Helper to assign a priority number:
-    // Lower number = appears higher up
     const getPriority = (t: any) => {
-      const status = showApproval(t);
-      if (status === "show") return 1;     // 1. Highest priority: waiting for YOU to approve
-      if (status === "pending") return 2;  // 2. Waiting for your partner to approve
-      return 3;                            // 3. Settled/Done ("approved" and "declined")
+      if (t.approval === "false") {
+        return t.creator_id !== userId ? 1 : 2;
+      }
+      return 3;
     };
 
-    const priorityA = getPriority(a);
-    const priorityB = getPriority(b);
-
-    // If they have different priorities, sort by priority
-    if (priorityA !== priorityB) {
-      return priorityA - priorityB;
-    }
-
-    // If they have the same priority, sort chronologically (newest first)
+    const prioA = getPriority(a);
+    const prioB = getPriority(b);
+    if (prioA !== prioB) return prioA - prioB;
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
 
+  const displayedTransactions = showAll
+    ? sortedTransactions
+    : sortedTransactions.slice(0, 5);
 
-  return(
-    <main className="container">
-      <div className="Banner">
-          <div className="BannerRow">
-            <Link to="/" className="banner-logo-link">
-              <img src={appLogo} alt="KeepTabs" className="banner-logo" />
-            </Link>
+  return (
+    <div className="flex-1 flex flex-col">
+      <AppHeader username={username} backTo="/" title={partner} />
 
-            <div className="row">
-              <h1 className="Username">{partner}</h1>
+      <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 space-y-6">
+        <BalanceHero
+          mode="partner"
+          partnerName={partner}
+          balance={debt}
+        />
+
+        <CreateTabCard
+          partnerName={partner}
+          onSubmit={handleCreateTransaction}
+        />
+
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <History className="h-5 w-5 text-muted-foreground" />
+              <h2 className="text-xl font-bold tracking-tight">Transaction History</h2>
             </div>
-        </div>
-      </div>
-
-      <div className="row">
-        <h1 className={"total" + (parseFloat(debt) >= 0 ? " green" : " red")}>${debt}</h1>
-      </div>
-
-      <div className="transaction-row">
-        <div className="column">
-          <div className="row">
-            <h2>$</h2>
-            <input 
-            className="transaction"
-            type="text" 
-            placeholder="00.00" 
-            value={amount}
-            onChange={handleAmountChange}
-            inputMode="decimal"></input>
+            <span className="text-xs text-muted-foreground font-medium">
+              {transactions.length} total
+            </span>
           </div>
 
-          <div className="row">
-            <button className="trans" onClick={() => handleTransaction(true)}><b>add</b></button>
-            <button className="trans" onClick={() => handleTransaction(false)}><b>subtract</b></button>
-          </div>
-        </div>
-
-        <div className="column">
-          <div className="row">
-            <textarea className="explanation" 
-            placeholder="Reason" 
-            rows={3} 
-            value={explanation}
-            onChange={(e) => setExplanation(e.target.value)}>
-            </textarea>
-          </div>
-        </div>
-      </div>
-
-      <div className="row">
-        <h2>Transaction History</h2>
-      </div>
-      <div className="column">
-        {(sortedTransactions.length===0) && <p>No Transaction History</p>}
-              {(showAll ? sortedTransactions.slice(0,20): sortedTransactions.slice(0,5)).map((transaction) => (
-                
-                <div className="row">
-                  <div className="historyRow">
-                    <div className="history">
-                      <p className="explanationHist">{transaction.explanation}</p>
-                      <p className={"transactionHist" + color(transaction)} id="transactionHist">${correctHistory(transaction)}</p>
-                    </div>
-                    
-                    <div className="history">
-                      <p className="date">{formatDate(transaction.created_at)}</p>
-                      <div className="action">
-                        {showApproval(transaction) === "show" && 
-                        <button id="approve" onClick={() => handleApproval(transaction, true)}>Approve</button>}
-                        
-                        {showApproval(transaction) === "show" && 
-                        <button id="deny" onClick={() => handleApproval(transaction, false)}>Deny</button>}
-                      </div>
-
-                      {showApproval(transaction) === "pending" && <p id="pending">Pending</p>}
-                    </div>
-                  </div>
-                </div>
+          {sortedTransactions.length === 0 ? (
+            <div className="text-center p-12 border border-dashed border-border rounded-xl bg-card/30 space-y-2">
+              <History className="h-8 w-8 text-muted-foreground mx-auto" />
+              <p className="text-sm font-medium text-foreground">No transaction history</p>
+              <p className="text-xs text-muted-foreground">
+                Create a tab above to start keeping track
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-2.5">
+              {displayedTransactions.map((tx) => (
+                <TransactionItem
+                  key={tx.id}
+                  transaction={tx}
+                  currentUserId={userId}
+                  onApprove={(t) => handleApproval(t, true)}
+                  onDeny={(t) => handleApproval(t, false)}
+                />
               ))}
-      </div>
-      <div className="row">
-      {transactions.length > 5 && 
-      <button id="more" onClick={() => handleShow()}>{showAll ? "Show Less" : "Show " + (transactions.length-5) + " more"}</button>}
-      </div>
-    </main>
-  )
+            </div>
+          )}
+
+          {transactions.length > 5 && (
+            <div className="flex justify-center pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAll(!showAll)}
+                className="gap-1.5"
+              >
+                {showAll ? (
+                  <>
+                    <ChevronUp className="h-4 w-4" />
+                    Show Less
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="h-4 w-4" />
+                    Show {transactions.length - 5} More
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
+        </section>
+      </main>
+    </div>
+  );
 }
