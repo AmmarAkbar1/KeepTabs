@@ -28,7 +28,15 @@ export function PartnerCard({
 
   return (
     <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
       className="group flex items-center justify-between p-4 rounded-xl border border-border bg-card/50 hover:bg-card/90 transition-all cursor-pointer shadow-sm hover:shadow-md"
     >
       <div className="flex items-center gap-3.5 min-w-0">

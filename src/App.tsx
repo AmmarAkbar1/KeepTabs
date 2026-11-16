@@ -9,6 +9,10 @@ export default function App() {
     let channel: any;
 
     async function setupRealtimeListener() {
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+
       const {
         data: { session },
       } = await supabase.auth.getSession();

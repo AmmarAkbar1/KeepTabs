@@ -15,8 +15,8 @@ interface TransactionItemProps {
     approval: string;
   };
   currentUserId: string;
-  onApprove: (tx: any) => void;
-  onDeny: (tx: any) => void;
+  onApprove: (tx: TransactionItemProps["transaction"]) => void;
+  onDeny: (tx: TransactionItemProps["transaction"]) => void;
 }
 
 export function TransactionItem({
